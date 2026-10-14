@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    image: myapp:local
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    restart: unless-stopped

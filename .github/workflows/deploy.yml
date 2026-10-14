@@ -1,0 +1,46 @@
+name: Build and deploy to ECS
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write   # OIDC login to AWS, no long-lived keys
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  APP_NAME: myapp
+  CLUSTER: myapp-cluster
+  SERVICE: myapp-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
+        run: |
+          IMAGE="$REGISTRY/$APP_NAME:$TAG"
+          docker buildx build --platform linux/amd64 -t "$IMAGE" --push .
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: ./infra/ecs/deploy-service.sh
